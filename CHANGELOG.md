@@ -1,5 +1,10 @@
 # Ranged Pumps Changelog
 
+### 0.9
+- Port to Minecraft 1.17.1 (raoulvdberge)
+- Added Italian translation (maicol07)
+- Added Brazilian Portuguese translation (flagar0)
+
 ### 0.8.2
 - Port to Minecraft 1.16.3 (raoulvdberge)
 

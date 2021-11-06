@@ -1,21 +1,21 @@
-package com.refinedmods.rangedpumps.tile;
+package com.refinedmods.rangedpumps.blockentity;
 
 import com.refinedmods.rangedpumps.RangedPumps;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.FlowingFluidBlock;
-import net.minecraft.fluid.Fluid;
-import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.nbt.INBT;
-import net.minecraft.nbt.ListNBT;
-import net.minecraft.nbt.LongNBT;
-import net.minecraft.tileentity.ITickableTileEntity;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.tileentity.TileEntityType;
-import net.minecraft.util.Direction;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.LongTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.util.Constants;
 import net.minecraftforge.common.util.LazyOptional;
@@ -37,9 +37,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
-public class PumpTile extends TileEntity implements ITickableTileEntity {
+public class PumpBlockEntity extends BlockEntity {
     @ObjectHolder(RangedPumps.ID + ":pump")
-    public static final TileEntityType<PumpTile> TYPE = null;
+    public static final BlockEntityType<PumpBlockEntity> TYPE = null;
 
     private PumpTank tank = new PumpTank();
     private IEnergyStorage energy = new EnergyStorage(RangedPumps.SERVER_CONFIG.getEnergyCapacity());
@@ -55,15 +55,15 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
     private Queue<BlockPos> surfaces = new LinkedList<>();
     private Block blockToReplaceLiquidsWith;
 
-    public PumpTile() {
-        super(TYPE);
+    public PumpBlockEntity(BlockPos pos, BlockState state) {
+        super(TYPE, pos, state);
     }
 
     private void rebuildSurfaces() {
         surfaces.clear();
 
         if (range == -1) {
-            surfaces.add(pos.down());
+            surfaces.add(getBlockPos().below());
 
             return;
         }
@@ -73,22 +73,22 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
 
         // Top
         for (int i = 0; i < hl; ++i) {
-            surfaces.add(pos.add(-range - 1 + i, -1, -range - 1));
+            surfaces.add(getBlockPos().offset(-range - 1 + i, -1, -range - 1));
         }
 
         // Right
         for (int i = 0; i < vl; ++i) {
-            surfaces.add(pos.add(-range - 1 + vl + 1, -1, -range - 1 + i + 1));
+            surfaces.add(getBlockPos().offset(-range - 1 + vl + 1, -1, -range - 1 + i + 1));
         }
 
         // Bottom
         for (int i = 0; i < hl; ++i) {
-            surfaces.add(pos.add(-range - 1 + hl - i - 1, -1, -range - 1 + hl - 1));
+            surfaces.add(getBlockPos().offset(-range - 1 + hl - i - 1, -1, -range - 1 + hl - 1));
         }
 
         // Left
         for (int i = 0; i < vl; ++i) {
-            surfaces.add(pos.add(-range - 1, -1, -range - 1 + vl - i));
+            surfaces.add(getBlockPos().offset(-range - 1, -1, -range - 1 + vl - i));
         }
     }
 
@@ -101,12 +101,11 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
         }
     }
 
-    @Override
-    public void tick() {
-        if (world.isRemote) {
-            return;
-        }
+    public static void serverTick(Level level, BlockPos pos, BlockState state, PumpBlockEntity tile) {
+        tile.update(level, pos);
+    }
 
+    private void update(Level level, BlockPos pos) {
         if (!RangedPumps.SERVER_CONFIG.getUseEnergy()) {
             energy.receiveEnergy(energy.getMaxEnergyStored(), false);
         }
@@ -116,10 +115,10 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
             List<IFluidHandler> fluidHandlers = new LinkedList<>();
 
             for (Direction facing : Direction.values()) {
-                TileEntity tile = world.getTileEntity(pos.offset(facing));
+                BlockEntity fluidTile = level.getBlockEntity(pos.relative(facing));
 
-                if (tile != null) {
-                    IFluidHandler handler = tile.getCapability(CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY, facing.getOpposite()).orElse(null);
+                if (fluidTile != null) {
+                    IFluidHandler handler = fluidTile.getCapability(CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY, facing.getOpposite()).orElse(null);
 
                     if (handler != null) {
                         fluidHandlers.add(handler);
@@ -153,15 +152,15 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
 
                 currentPos = surfaces.poll();
             } else {
-                currentPos = currentPos.down();
+                currentPos = currentPos.below();
             }
 
             energy.extractEnergy(RangedPumps.SERVER_CONFIG.getEnergyUsagePerMove(), false);
 
-            FluidStack drained = drainAt(currentPos, IFluidHandler.FluidAction.SIMULATE);
+            FluidStack drained = drainAt(level, currentPos, IFluidHandler.FluidAction.SIMULATE);
 
             if (!drained.isEmpty() && tank.fillInternal(drained, IFluidHandler.FluidAction.SIMULATE) == drained.getAmount()) {
-                drained = drainAt(currentPos, IFluidHandler.FluidAction.EXECUTE);
+                drained = drainAt(level, currentPos, IFluidHandler.FluidAction.EXECUTE);
 
                 if (!drained.isEmpty()) {
                     tank.fillInternal(drained, IFluidHandler.FluidAction.EXECUTE);
@@ -172,7 +171,7 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
                         }
 
                         if (blockToReplaceLiquidsWith != null) {
-                            world.setBlockState(currentPos, blockToReplaceLiquidsWith.getDefaultState());
+                            level.setBlockAndUpdate(currentPos, blockToReplaceLiquidsWith.defaultBlockState());
                         }
                     }
 
@@ -180,41 +179,37 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
                 }
             }
 
-            markDirty();
+            setChanged();
         }
 
         ticks++;
     }
 
     @Nonnull
-    private FluidStack drainAt(BlockPos pos, IFluidHandler.FluidAction action) {
-        BlockState frontBlockState = world.getBlockState(pos);
+    private FluidStack drainAt(Level level, BlockPos pos, IFluidHandler.FluidAction action) {
+        BlockState frontBlockState = level.getBlockState(pos);
         Block frontBlock = frontBlockState.getBlock();
 
-        if (frontBlock instanceof FlowingFluidBlock) {
+        if (frontBlock instanceof LiquidBlock liquidBlock) {
             // @Volatile: Logic from FlowingFluidBlock#pickupFluid
-            if (frontBlockState.get(FlowingFluidBlock.LEVEL) == 0) {
-                Fluid fluid = ((FlowingFluidBlock) frontBlock).getFluid();
+            if (frontBlockState.getValue(LiquidBlock.LEVEL) == 0) {
+                Fluid fluid = liquidBlock.getFluid().getFlowing();
 
                 if (action == IFluidHandler.FluidAction.EXECUTE) {
-                    world.setBlockState(pos, Blocks.AIR.getDefaultState(), 11);
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 11);
                 }
 
                 return new FluidStack(fluid, FluidAttributes.BUCKET_VOLUME);
             }
-        } else if (frontBlock instanceof IFluidBlock) {
-            IFluidBlock fluidBlock = (IFluidBlock) frontBlock;
-
-            if (fluidBlock.canDrain(world, pos)) {
-                return fluidBlock.drain(world, pos, action);
-            }
+        } else if (frontBlock instanceof IFluidBlock fluidBlock && fluidBlock.canDrain(level, pos)) {
+            return fluidBlock.drain(level, pos, action);
         }
 
         return FluidStack.EMPTY;
     }
 
     BlockPos getCurrentPosition() {
-        return currentPos == null ? pos.down() : currentPos;
+        return currentPos == null ? getBlockPos().below() : currentPos;
     }
 
     int getRange() {
@@ -224,7 +219,7 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
     PumpState getState() {
         if (range > RangedPumps.SERVER_CONFIG.getRange()) {
             return PumpState.DONE;
-        } else if (world.isBlockPowered(pos)) {
+        } else if (level.hasNeighborSignal(getCurrentPosition())) {
             return PumpState.REDSTONE;
         } else if (energy.getEnergyStored() == 0) {
             return PumpState.ENERGY;
@@ -240,20 +235,20 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
     }
 
     @Override
-    public CompoundNBT write(CompoundNBT tag) {
-        super.write(tag);
+    public CompoundTag serializeNBT() {
+        CompoundTag tag = new CompoundTag();
 
         tag.putInt("Energy", energy.getEnergyStored());
 
         if (currentPos != null) {
-            tag.putLong("CurrentPos", currentPos.toLong());
+            tag.putLong("CurrentPos", currentPos.asLong());
         }
 
         tag.putInt("Range", range);
 
-        ListNBT surfaces = new ListNBT();
+        ListTag surfaces = new ListTag();
 
-        this.surfaces.forEach(s -> surfaces.add(LongNBT.valueOf(s.toLong())));
+        this.surfaces.forEach(s -> surfaces.add(LongTag.valueOf(s.asLong())));
 
         tag.put("Surfaces", surfaces);
 
@@ -263,15 +258,15 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
     }
 
     @Override
-    public void read(BlockState blockState, CompoundNBT tag) {
-        super.read(blockState, tag);
+    public void deserializeNBT(CompoundTag tag) {
+        super.deserializeNBT(tag);
 
         if (tag.contains("Energy")) {
             energy.receiveEnergy(tag.getInt("Energy"), false);
         }
 
         if (tag.contains("CurrentPos")) {
-            currentPos = BlockPos.fromLong(tag.getLong("CurrentPos"));
+            currentPos = BlockPos.of(tag.getLong("CurrentPos"));
         }
 
         if (tag.contains("Range")) {
@@ -279,10 +274,10 @@ public class PumpTile extends TileEntity implements ITickableTileEntity {
         }
 
         if (tag.contains("Surfaces")) {
-            ListNBT surfaces = tag.getList("Surfaces", Constants.NBT.TAG_LONG);
+            ListTag surfaces = tag.getList("Surfaces", Constants.NBT.TAG_LONG);
 
-            for (INBT surface : surfaces) {
-                this.surfaces.add(BlockPos.fromLong(((LongNBT) surface).getLong()));
+            for (Tag surface : surfaces) {
+                this.surfaces.add(BlockPos.of(((LongTag) surface).getAsLong()));
             }
         }
 
