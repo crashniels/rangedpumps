@@ -1,0 +1,136 @@
+buildscript {
+    repositories {
+        // These repositories are only for Gradle plugins, put any other repositories in the repository block further below
+        maven { url = 'https://maven.minecraftforge.net' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'eclipse'
+apply plugin: 'maven-publish'
+
+version = '0.9'
+def env = System.getenv()
+if (env.BUILD_NUMBER) {
+    version = version + "+" + "${env.BUILD_NUMBER}"
+}
+group = 'com.refinedmods'
+archivesBaseName = 'rangedpumps'
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(16)
+
+minecraft {
+    mappings channel: 'official', version: '1.17.1'
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                rangedpumps {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        server {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                rangedpumps {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        data {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
+            property 'forge.logging.console.level', 'debug'
+            args '--mod', 'rangedpumps', '--all', '--output', file('src/generated/resources/')
+            mods {
+                rangedpumps {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+processResources {
+    duplicatesStrategy = 'include'
+    inputs.property 'version', project.version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'META-INF/mods.toml'
+
+        expand 'version': project.version
+    }
+
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'META-INF/mods.toml'
+    }
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.17.1-37.0.103'
+}
+
+jar {
+    manifest {
+        attributes([
+                "Specification-Title"     : "rangedpumps",
+                "Specification-Vendor"    : "refinedmods",
+                "Specification-Version"   : "1",
+                "Implementation-Title"    : project.name,
+                "Implementation-Version"  : "${version}",
+                "Implementation-Vendor"   : "refinedmods",
+                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+jar.finalizedBy('reobfJar')
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task deobfJar(type:Jar) {
+    from sourceSets.main.output
+    classifier 'deobf'
+}
+
+artifacts {
+    archives jar
+    archives sourcesJar
+    archives deobfJar
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId = project.group
+            artifactId = project.archivesBaseName
+            version = project.version
+            artifact jar
+            artifact sourcesJar
+            artifact deobfJar
+        }
+    }
+}
+
+publishing {
+    repositories {
+        maven {
+            url "/var/www/repo"
+        }
+    }
+}

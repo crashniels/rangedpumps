@@ -1,136 +1,76 @@
-buildscript {
-    repositories {
-        // These repositories are only for Gradle plugins, put any other repositories in the repository block further below
-        maven { url = 'https://maven.minecraftforge.net' }
-        mavenCentral()
-    }
-    dependencies {
-        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
-    }
+plugins {
+    id 'fabric-loom' version '0.10-SNAPSHOT'
+    id 'maven-publish'
 }
 
-apply plugin: 'net.minecraftforge.gradle'
-apply plugin: 'eclipse'
-apply plugin: 'maven-publish'
+sourceCompatibility = JavaVersion.VERSION_16
+targetCompatibility = JavaVersion.VERSION_16
 
-version = '0.9'
-def env = System.getenv()
-if (env.BUILD_NUMBER) {
-    version = version + "+" + "${env.BUILD_NUMBER}"
-}
-group = 'com.refinedmods'
-archivesBaseName = 'rangedpumps'
+archivesBaseName = project.archives_base_name
+version = project.mod_version
+group = project.maven_group
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(16)
-
-minecraft {
-    mappings channel: 'official', version: '1.17.1'
-
-    runs {
-        client {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
-            property 'forge.logging.console.level', 'debug'
-            mods {
-                rangedpumps {
-                    source sourceSets.main
-                }
-            }
-        }
-
-        server {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
-            property 'forge.logging.console.level', 'debug'
-            mods {
-                rangedpumps {
-                    source sourceSets.main
-                }
-            }
-        }
-
-        data {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
-            property 'forge.logging.console.level', 'debug'
-            args '--mod', 'rangedpumps', '--all', '--output', file('src/generated/resources/')
-            mods {
-                rangedpumps {
-                    source sourceSets.main
-                }
-            }
-        }
-    }
-}
-
-processResources {
-    duplicatesStrategy = 'include'
-    inputs.property 'version', project.version
-
-    from(sourceSets.main.resources.srcDirs) {
-        include 'META-INF/mods.toml'
-
-        expand 'version': project.version
-    }
-
-    from(sourceSets.main.resources.srcDirs) {
-        exclude 'META-INF/mods.toml'
-    }
+repositories {
+    // Add repositories to retrieve artifacts from in here.
+    // You should only use this when depending on other mods because
+    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
+    // for more information about repositories.
+    maven { url = "https://cursemaven.com" }
 }
 
 dependencies {
-    minecraft 'net.minecraftforge:forge:1.17.1-37.0.103'
+    // To change the versions see the gradle.properties.old file
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Fabric API. This is technically optional, but you probably want it anyway.
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    //Forge Config API
+    modImplementation "curse.maven:ForgeConfigAPIPort-547434:3551754"
+}
+
+processResources {
+    inputs.property "version", project.version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // Minecraft 1.17 (21w19a) upwards uses Java 16.
+    it.options.release = 16
+}
+
+java {
+    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+    // if it is present.
+    // If you remove this line, sources will not be generated.
+    withSourcesJar()
 }
 
 jar {
-    manifest {
-        attributes([
-                "Specification-Title"     : "rangedpumps",
-                "Specification-Vendor"    : "refinedmods",
-                "Specification-Version"   : "1",
-                "Implementation-Title"    : project.name,
-                "Implementation-Version"  : "${version}",
-                "Implementation-Vendor"   : "refinedmods",
-                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
-        ])
+    from("LICENSE") {
+        rename { "${it}_${project.archivesBaseName}"}
     }
 }
 
-jar.finalizedBy('reobfJar')
-
-task sourcesJar(type: Jar, dependsOn: classes) {
-    classifier = 'sources'
-    from sourceSets.main.allSource
-}
-
-task deobfJar(type:Jar) {
-    from sourceSets.main.output
-    classifier 'deobf'
-}
-
-artifacts {
-    archives jar
-    archives sourcesJar
-    archives deobfJar
-}
-
+// configure the maven publication
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            groupId = project.group
-            artifactId = project.archivesBaseName
-            version = project.version
-            artifact jar
-            artifact sourcesJar
-            artifact deobfJar
+            from components.java
         }
     }
-}
 
-publishing {
+    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
     repositories {
-        maven {
-            url "/var/www/repo"
-        }
+        // Add repositories to publish to here.
+        // Notice: This block does NOT have the same function as the block in the top level.
+        // The repositories here will be used for publishing your artifact, not for
+        // retrieving dependencies.
     }
 }
