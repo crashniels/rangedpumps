@@ -17,7 +17,8 @@ public final class RangedPumps implements ModInitializer {
         ModLoadingContext.registerConfig(ID, ModConfig.Type.SERVER, SERVER_CONFIG.getSpec());
 
         CommonSetup.RegisterBlocks();
-        CommonSetup.RegisterItems();
         CommonSetup.RegisterTiles();
+        CommonSetup.RegisterItems();
+        CommonSetup.RegiserEnergy();
     }
 }

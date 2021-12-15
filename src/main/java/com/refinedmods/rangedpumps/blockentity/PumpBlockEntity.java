@@ -1,8 +1,16 @@
 package com.refinedmods.rangedpumps.blockentity;
 
 import com.refinedmods.rangedpumps.RangedPumps;
+import com.refinedmods.rangedpumps.setup.CommonSetup;
+import net.fabricmc.fabric.api.transfer.v1.fluid.FluidConstants;
+import net.fabricmc.fabric.api.transfer.v1.fluid.FluidStorage;
+import net.fabricmc.fabric.api.transfer.v1.fluid.FluidVariant;
+import net.fabricmc.fabric.api.transfer.v1.fluid.base.SingleFluidStorage;
+import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.LongTag;
@@ -16,36 +24,31 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluid;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.util.Constants;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.energy.CapabilityEnergy;
-import net.minecraftforge.energy.EnergyStorage;
-import net.minecraftforge.energy.IEnergyStorage;
-import net.minecraftforge.fluids.FluidAttributes;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.IFluidBlock;
-import net.minecraftforge.fluids.capability.CapabilityFluidHandler;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.fluids.capability.templates.FluidTank;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.ObjectHolder;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import team.reborn.energy.api.EnergyStorage;
+import team.reborn.energy.api.base.SimpleEnergyStorage;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
+@SuppressWarnings("ALL")
 public class PumpBlockEntity extends BlockEntity {
-    @ObjectHolder(RangedPumps.ID + ":pump")
     public static final BlockEntityType<PumpBlockEntity> TYPE = null;
 
-    private PumpTank tank = new PumpTank();
-    private IEnergyStorage energy = new EnergyStorage(RangedPumps.SERVER_CONFIG.getEnergyCapacity());
-
-    private final LazyOptional<IEnergyStorage> energyProxyCap = LazyOptional.of(() -> energy);
-    private final LazyOptional<IFluidHandler> fluidHandlerCap = LazyOptional.of(() -> tank);
+    private final SingleFluidStorage tank = new SingleFluidStorage() {
+        @Override
+        protected long getCapacity(FluidVariant fluidVariant) {
+            return RangedPumps.SERVER_CONFIG.getTankCapacity();
+        }
+    };
+    public final SimpleEnergyStorage energy = new SimpleEnergyStorage(RangedPumps.SERVER_CONFIG.getEnergyCapacity(), 512,512){
+        @Override
+        protected void onFinalCommit() {
+            //idk
+        }
+    };
 
     private int ticks;
 
@@ -56,7 +59,11 @@ public class PumpBlockEntity extends BlockEntity {
     private Block blockToReplaceLiquidsWith;
 
     public PumpBlockEntity(BlockPos pos, BlockState state) {
-        super(TYPE, pos, state);
+        super(CommonSetup.PumpBlockTE, pos, state);
+
+        if (surfaces.isEmpty()) {
+            rebuildSurfaces();
+        }
     }
 
     private void rebuildSurfaces() {
@@ -92,153 +99,148 @@ public class PumpBlockEntity extends BlockEntity {
         }
     }
 
-    @Override
-    public void onLoad() {
-        super.onLoad();
-
-        if (surfaces.isEmpty()) {
-            rebuildSurfaces();
-        }
-    }
-
     public static void serverTick(Level level, BlockPos pos, BlockState state, PumpBlockEntity tile) {
-        tile.update(level, pos);
+        //tile.update(level, pos);
     }
 
-    private void update(Level level, BlockPos pos) {
-        if (!RangedPumps.SERVER_CONFIG.getUseEnergy()) {
-            energy.receiveEnergy(energy.getMaxEnergyStored(), false);
-        }
-
-        // Fill neighbors
-        if (!tank.getFluid().isEmpty()) {
-            List<IFluidHandler> fluidHandlers = new LinkedList<>();
-
-            for (Direction facing : Direction.values()) {
-                BlockEntity fluidTile = level.getBlockEntity(pos.relative(facing));
-
-                if (fluidTile != null) {
-                    IFluidHandler handler = fluidTile.getCapability(CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY, facing.getOpposite()).orElse(null);
-
-                    if (handler != null) {
-                        fluidHandlers.add(handler);
-                    }
-                }
-            }
-
-            if (!fluidHandlers.isEmpty()) {
-                int transfer = (int) Math.floor((float) tank.getFluidAmount() / (float) fluidHandlers.size());
-
-                for (IFluidHandler fluidHandler : fluidHandlers) {
-                    FluidStack toFill = tank.getFluid().copy();
-                    toFill.setAmount(transfer);
-
-                    tank.drain(fluidHandler.fill(toFill, IFluidHandler.FluidAction.EXECUTE), IFluidHandler.FluidAction.EXECUTE);
-                }
-            }
-        }
-
-        if ((RangedPumps.SERVER_CONFIG.getSpeed() == 0 || (ticks % RangedPumps.SERVER_CONFIG.getSpeed() == 0)) && getState() == PumpState.WORKING) {
-            if (currentPos == null || currentPos.getY() == 0) {
-                if (surfaces.isEmpty()) {
-                    range++;
-
-                    if (range > RangedPumps.SERVER_CONFIG.getRange()) {
-                        return;
-                    }
-
-                    rebuildSurfaces();
-                }
-
-                currentPos = surfaces.poll();
-            } else {
-                currentPos = currentPos.below();
-            }
-
-            energy.extractEnergy(RangedPumps.SERVER_CONFIG.getEnergyUsagePerMove(), false);
-
-            FluidStack drained = drainAt(level, currentPos, IFluidHandler.FluidAction.SIMULATE);
-
-            if (!drained.isEmpty() && tank.fillInternal(drained, IFluidHandler.FluidAction.SIMULATE) == drained.getAmount()) {
-                drained = drainAt(level, currentPos, IFluidHandler.FluidAction.EXECUTE);
-
-                if (!drained.isEmpty()) {
-                    tank.fillInternal(drained, IFluidHandler.FluidAction.EXECUTE);
-
-                    if (RangedPumps.SERVER_CONFIG.getReplaceLiquidWithBlock()) {
-                        if (blockToReplaceLiquidsWith == null) {
-                            blockToReplaceLiquidsWith = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(RangedPumps.SERVER_CONFIG.getBlockIdToReplaceLiquidsWith()));
-                        }
-
-                        if (blockToReplaceLiquidsWith != null) {
-                            level.setBlockAndUpdate(currentPos, blockToReplaceLiquidsWith.defaultBlockState());
-                        }
-                    }
-
-                    energy.extractEnergy(RangedPumps.SERVER_CONFIG.getEnergyUsagePerDrain(), false);
-                }
-            }
-
-            setChanged();
-        }
-
-        ticks++;
-    }
-
-    @Nonnull
-    private FluidStack drainAt(Level level, BlockPos pos, IFluidHandler.FluidAction action) {
-        BlockState frontBlockState = level.getBlockState(pos);
-        Block frontBlock = frontBlockState.getBlock();
-
-        if (frontBlock instanceof LiquidBlock liquidBlock) {
-            // @Volatile: Logic from FlowingFluidBlock#pickupFluid
-            if (frontBlockState.getValue(LiquidBlock.LEVEL) == 0) {
-                Fluid fluid = liquidBlock.getFluid().getFlowing();
-
-                if (action == IFluidHandler.FluidAction.EXECUTE) {
-                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 11);
-                }
-
-                return new FluidStack(fluid, FluidAttributes.BUCKET_VOLUME);
-            }
-        } else if (frontBlock instanceof IFluidBlock fluidBlock && fluidBlock.canDrain(level, pos)) {
-            return fluidBlock.drain(level, pos, action);
-        }
-
-        return FluidStack.EMPTY;
-    }
-
-    BlockPos getCurrentPosition() {
-        return currentPos == null ? getBlockPos().below() : currentPos;
-    }
-
-    int getRange() {
-        return range;
-    }
-
-    PumpState getState() {
-        if (range > RangedPumps.SERVER_CONFIG.getRange()) {
-            return PumpState.DONE;
-        } else if (level.hasNeighborSignal(getCurrentPosition())) {
-            return PumpState.REDSTONE;
-        } else if (energy.getEnergyStored() == 0) {
-            return PumpState.ENERGY;
-        } else if (tank.getFluidAmount() > tank.getCapacity() - FluidAttributes.BUCKET_VOLUME) {
-            return PumpState.FULL;
-        } else {
-            return PumpState.WORKING;
-        }
-    }
-
-    public FluidTank getTank() {
-        return tank;
-    }
-
+//    private void update(Level level, BlockPos pos) {
+//        if (!RangedPumps.SERVER_CONFIG.getUwseEnergy()) {
+//            energy.insert(energy.capacity, Transaction.openOuter());
+//        }
+//
+//        // Fill neighbors
+//        if (!tank.getResource().isBlank()) {
+//            List<FluidVariant> fluidHandlers = new LinkedList<>();
+//
+//            for (Direction facing : Direction.values()) {
+//                BlockEntity fluidTile = level.getBlockEntity(pos.relative(facing));
+//
+//                if (fluidTile != null) {
+//                    FluidStorage handler = fluidTile.getCapability(CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY, facing.getOpposite()).orElse(null);
+//
+//                    if (handler != null) {
+//                        fluidHandlers.add(handler);
+//                    }
+//                }
+//            }
+//
+//            if (!fluidHandlers.isEmpty()) {
+//                int transfer = (int) Math.floor((float) tank.getAmount() / (float) fluidHandlers.size());
+//
+//                for (IFluidHandler fluidHandler : fluidHandlers) {
+//                    FluidVariant toFill = tank.getResource();
+//                    toFill.setAmount(transfer);
+//
+//                    tank.drain(fluidHandler.fill(toFill, IFluidHandler.FluidAction.EXECUTE), IFluidHandler.FluidAction.EXECUTE);
+//                }
+//            }
+//        }
+//
+//        if ((RangedPumps.SERVER_CONFIG.getSpeed() == 0 || (ticks % RangedPumps.SERVER_CONFIG.getSpeed() == 0)) && getState() == PumpState.WORKING) {
+//            if (currentPos == null || currentPos.getY() == 0) {
+//                if (surfaces.isEmpty()) {
+//                    range++;
+//
+//                    if (range > RangedPumps.SERVER_CONFIG.getRange()) {
+//                        return;
+//                    }
+//
+//                    rebuildSurfaces();
+//                }
+//
+//                currentPos = surfaces.poll();
+//            } else {
+//                currentPos = currentPos.below();
+//            }
+//
+//            energy.extract(RangedPumps.SERVER_CONFIG.getEnergyUsagePerMove(), Transaction.openOuter());
+//
+//            FluidVariant drained = drainAt(level, currentPos, IFluidHandler.FluidAction.SIMULATE);
+//
+//            if (!drained.isBlank() && tank.fillInternal(drained, IFluidHandler.FluidAction.SIMULATE) == drained.getAmount()) {
+//                drained = drainAt(level, currentPos, IFluidHandler.FluidAction.EXECUTE);
+//
+//                if (!drained.isBlank()) {
+//                    tank.fillInternal(drained, IFluidHandler.FluidAction.EXECUTE);
+//
+//                    if (RangedPumps.SERVER_CONFIG.getReplaceLiquidWithBlock()) {
+//                        if (blockToReplaceLiquidsWith == null) {
+//                            blockToReplaceLiquidsWith = Registry.BLOCK.get(new ResourceLocation(RangedPumps.SERVER_CONFIG.getBlockIdToReplaceLiquidsWith()));
+//                        }
+//
+//                        if (blockToReplaceLiquidsWith != null) {
+//                            level.setBlockAndUpdate(currentPos, blockToReplaceLiquidsWith.defaultBlockState());
+//                        }
+//                    }
+//
+//                    energy.extract(RangedPumps.SERVER_CONFIG.getEnergyUsagePerDrain(), Transaction.openOuter());
+//                }
+//            }
+//
+//            setChanged();
+//        }
+//
+//        ticks++;
+//    }
+//
+//    @NotNull
+//    private FluidVariant drainAt(Level level, BlockPos pos, TransactionContext.Result action) {
+//        BlockState frontBlockState = level.getBlockState(pos);
+//        Block frontBlock = frontBlockState.getBlock();
+//
+//        if (frontBlock instanceof LiquidBlock liquidBlock) {
+//            // @Volatile: Logic from FlowingFluidBlock#pickupFluid
+//            if (frontBlockState.getValue(LiquidBlock.LEVEL) == 0) {
+//                Fluid fluid = liquidBlock.getFluid().getFlowing();
+//
+//                if (action == TransactionContext.Result.COMMITTED) {
+//                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 11);
+//                }
+//
+//                return new Fluid(fluid, FluidAttributes.BUCKET_VOLUME);
+//            }
+//        } else if (frontBlock instanceof IFluidBlock fluidBlock && fluidBlock.canDrain(level, pos)) {
+//            return fluidBlock.drain(level, pos, action);
+//        }
+//
+//        return FluidVariant.blank();
+//    }
+//
+//    BlockPos getCurrentPosition() {
+//        return currentPos == null ? getBlockPos().below() : currentPos;
+//    }
+//
+//    int getRange() {
+//        return range;
+//    }
+//
+//    PumpState getState() {
+//        if (range > RangedPumps.SERVER_CONFIG.getRange()) {
+//            return PumpState.DONE;
+//        } else if (level.hasNeighborSignal(getCurrentPosition())) {
+//            return PumpState.REDSTONE;
+//        } else if (energy.getAmount() == 0) {
+//            return PumpState.ENERGY;
+//        } else if (tank.getAmount() > tank.getCapacity() - FluidConstants.BUCKET) {
+//            return PumpState.FULL;
+//        } else {
+//            return PumpState.WORKING;
+//        }
+//    }
+//
+//    public SingleFluidStorage getTank() {
+//        return tank;
+//    }
+//
+//    public SimpleEnergyStorage getEnergy() {
+//        return energy;
+//    }
+//
     @Override
     public CompoundTag serializeNBT() {
         CompoundTag tag = new CompoundTag();
 
-        tag.putInt("Energy", energy.getEnergyStored());
+        tag.putLong("Energy", energy.getAmount());
 
         if (currentPos != null) {
             tag.putLong("CurrentPos", currentPos.asLong());
@@ -262,7 +264,7 @@ public class PumpBlockEntity extends BlockEntity {
         super.deserializeNBT(tag);
 
         if (tag.contains("Energy")) {
-            energy.receiveEnergy(tag.getInt("Energy"), false);
+            energy.insert(tag.getInt("Energy"), Transaction.openOuter());
         }
 
         if (tag.contains("CurrentPos")) {
@@ -274,7 +276,7 @@ public class PumpBlockEntity extends BlockEntity {
         }
 
         if (tag.contains("Surfaces")) {
-            ListTag surfaces = tag.getList("Surfaces", Constants.NBT.TAG_LONG);
+            ListTag surfaces = tag.getList("Surfaces", Tag.TAG_LONG);
 
             for (Tag surface : surfaces) {
                 this.surfaces.add(BlockPos.of(((LongTag) surface).getAsLong()));
@@ -284,32 +286,24 @@ public class PumpBlockEntity extends BlockEntity {
         tank.readFromNBT(tag);
     }
 
-    @Nonnull
-    @Override
-    public <T> LazyOptional<T> getCapability(@Nonnull Capability<T> cap, @Nullable Direction direction) {
-        if (cap == CapabilityEnergy.ENERGY) {
-            return energyProxyCap.cast();
-        }
 
-        if (cap == CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY) {
-            return fluidHandlerCap.cast();
-        }
-
-        return super.getCapability(cap, direction);
-    }
-
-    private class PumpTank extends FluidTank {
-        public PumpTank() {
-            super(RangedPumps.SERVER_CONFIG.getTankCapacity());
-        }
-
-        @Override
-        public int fill(FluidStack resource, FluidAction action) {
-            return 0;
-        }
-
-        public int fillInternal(FluidStack resource, FluidAction action) {
-            return super.fill(resource, action);
-        }
-    }
+//    private static class PumpTank extends SingleVariantStorage<FluidVariant> implements ExtractionOnlyStorage<FluidVariant> {
+//        @Override
+//        protected FluidVariant getBlankVariant() {
+//            return FluidVariant.of(Fluids.LAVA);
+//        }
+//
+//        @Override
+//        protected long getCapacity(FluidVariant variant) {
+//            return RangedPumps.SERVER_CONFIG.getTankCapacity();
+//        }
+//
+//        public long getCap(FluidVariant variant) {
+//            return getCapacity();
+//        }
+//
+//        public String getFluidName() {
+//            return this.getAmount()
+//        }
+//    }
 }

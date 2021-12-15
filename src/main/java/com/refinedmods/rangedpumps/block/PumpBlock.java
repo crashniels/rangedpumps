@@ -12,6 +12,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
@@ -19,51 +20,39 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Material;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraftforge.energy.CapabilityEnergy;
-import net.minecraftforge.energy.IEnergyStorage;
-import net.minecraftforge.registries.ObjectHolder;
-
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 public class PumpBlock extends BaseEntityBlock {
-    @ObjectHolder(RangedPumps.ID + ":pump")
     public static final PumpBlock BLOCK = null;
 
     public PumpBlock() {
         super(Block.Properties.of(Material.STONE).strength(1.9F).sound(SoundType.STONE));
-
-        setRegistryName(RangedPumps.ID, "pump");
     }
 
-    @Override
-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!level.isClientSide()) {
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-
-            if (blockEntity instanceof PumpBlockEntity) {
-                PumpBlockEntity pump = (PumpBlockEntity) blockEntity;
-
-                IEnergyStorage energy = pump.getCapability(CapabilityEnergy.ENERGY).orElse(null);
-                if (energy == null) {
-                    return InteractionResult.SUCCESS;
-                }
-
-                Component message = PumpState.getMessage(pump);
-
-                if (message != null) {
-                    player.sendMessage(message, player.getUUID());
-                }
-
-                if (pump.getTank().getFluidAmount() == 0) {
-                    player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state_empty", energy.getEnergyStored(), energy.getMaxEnergyStored()), player.getUUID());
-                } else {
-                    player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state", pump.getTank().getFluidAmount(), pump.getTank().getFluid().getDisplayName(), energy.getEnergyStored(), energy.getMaxEnergyStored()), player.getUUID());
-                }
-            }
-        }
-
-        return InteractionResult.SUCCESS;
-    }
+//    @Override
+//    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+//        if (!level.isClientSide()) {
+//            BlockEntity blockEntity = level.getBlockEntity(pos);
+//
+//            if (blockEntity instanceof PumpBlockEntity) {
+//                PumpBlockEntity pump = (PumpBlockEntity) blockEntity;
+//
+//                Component message = PumpState.getMessage(pump);
+//
+//                if (message != null) {
+//                    player.sendMessage(message, player.getUUID());
+//                }
+//
+//                if (pump.getTank().getAmount() == 0) {
+//                    player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state_empty", pump.getEnergy().getAmount(), pump.getEnergy().getCapacity()), player.getUUID());
+//                } else {
+//                    player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state", pump.getTank(), pump.getTank().getResource().getObject().toString(), pump.getEnergy().getAmount(), pump.getEnergy().getCapacity()), player.getUUID());
+//                }
+//            }
+//        }
+//
+//        return InteractionResult.SUCCESS;
+//    }
 
     @Nullable
     @Override
@@ -75,5 +64,9 @@ public class PumpBlock extends BaseEntityBlock {
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
         return level.isClientSide ? null : createTickerHelper(type, PumpBlockEntity.TYPE, PumpBlockEntity::serverTick);
+    }
+
+    public RenderShape getRenderShape(BlockState state) {
+        return RenderShape.MODEL;
     }
 }
