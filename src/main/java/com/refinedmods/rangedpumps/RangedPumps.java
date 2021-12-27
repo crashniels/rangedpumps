@@ -20,5 +20,6 @@ public final class RangedPumps implements ModInitializer {
         CommonSetup.RegisterTiles();
         CommonSetup.RegisterItems();
         CommonSetup.RegiserEnergy();
+        CommonSetup.RegiserFluids();
     }
 }

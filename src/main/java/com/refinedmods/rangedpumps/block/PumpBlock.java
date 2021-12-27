@@ -3,6 +3,7 @@ package com.refinedmods.rangedpumps.block;
 import com.refinedmods.rangedpumps.RangedPumps;
 import com.refinedmods.rangedpumps.blockentity.PumpBlockEntity;
 import com.refinedmods.rangedpumps.blockentity.PumpState;
+import com.refinedmods.rangedpumps.setup.CommonSetup;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TranslatableComponent;
@@ -29,30 +30,30 @@ public class PumpBlock extends BaseEntityBlock {
         super(Block.Properties.of(Material.STONE).strength(1.9F).sound(SoundType.STONE));
     }
 
-//    @Override
-//    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-//        if (!level.isClientSide()) {
-//            BlockEntity blockEntity = level.getBlockEntity(pos);
-//
-//            if (blockEntity instanceof PumpBlockEntity) {
-//                PumpBlockEntity pump = (PumpBlockEntity) blockEntity;
-//
-//                Component message = PumpState.getMessage(pump);
-//
-//                if (message != null) {
-//                    player.sendMessage(message, player.getUUID());
-//                }
-//
-//                if (pump.getTank().getAmount() == 0) {
-//                    player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state_empty", pump.getEnergy().getAmount(), pump.getEnergy().getCapacity()), player.getUUID());
-//                } else {
-//                    player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state", pump.getTank(), pump.getTank().getResource().getObject().toString(), pump.getEnergy().getAmount(), pump.getEnergy().getCapacity()), player.getUUID());
-//                }
-//            }
-//        }
-//
-//        return InteractionResult.SUCCESS;
-//    }
+    @Override
+    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (!level.isClientSide()) {
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+
+            if (blockEntity instanceof PumpBlockEntity) {
+                PumpBlockEntity pump = (PumpBlockEntity) blockEntity;
+
+                Component message = PumpState.getMessage(pump);
+
+                if (message != null) {
+                    player.sendMessage(message, player.getUUID());
+                }
+
+                if (pump.tank.getAmount() == 0) {
+                    player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state_empty", pump.energy.getAmount(), pump.energy.getCapacity()), player.getUUID());
+                //} else {
+                    player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state", pump.tank.getAmount(), pump.tank.getResource().getFluid().getBucket().getDescription().getString(), pump.energy.getAmount(), pump.energy.getCapacity()), player.getUUID());
+                }
+            }
+        }
+
+        return InteractionResult.SUCCESS;
+    }
 
     @Nullable
     @Override
@@ -63,7 +64,7 @@ public class PumpBlock extends BaseEntityBlock {
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
-        return level.isClientSide ? null : createTickerHelper(type, PumpBlockEntity.TYPE, PumpBlockEntity::serverTick);
+        return level.isClientSide ? null : createTickerHelper(type, CommonSetup.PumpBlockTE, PumpBlockEntity::serverTick);
     }
 
     public RenderShape getRenderShape(BlockState state) {

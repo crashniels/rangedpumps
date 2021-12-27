@@ -3,46 +3,49 @@ package com.refinedmods.rangedpumps.blockentity;
 import com.refinedmods.rangedpumps.RangedPumps;
 import com.refinedmods.rangedpumps.setup.CommonSetup;
 import net.fabricmc.fabric.api.transfer.v1.fluid.FluidConstants;
-import net.fabricmc.fabric.api.transfer.v1.fluid.FluidStorage;
 import net.fabricmc.fabric.api.transfer.v1.fluid.FluidVariant;
-import net.fabricmc.fabric.api.transfer.v1.fluid.base.SingleFluidStorage;
+import net.fabricmc.fabric.api.transfer.v1.storage.base.SingleVariantStorage;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
-import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.LongTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.level.material.Fluids;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import team.reborn.energy.api.EnergyStorage;
 import team.reborn.energy.api.base.SimpleEnergyStorage;
 
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Queue;
 
 @SuppressWarnings("ALL")
 public class PumpBlockEntity extends BlockEntity {
-    public static final BlockEntityType<PumpBlockEntity> TYPE = null;
-
-    private final SingleFluidStorage tank = new SingleFluidStorage() {
+    public final SingleVariantStorage<FluidVariant> tank = new SingleVariantStorage<>() {
         @Override
-        protected long getCapacity(FluidVariant fluidVariant) {
+        protected FluidVariant getBlankVariant() {
+            return FluidVariant.blank();
+        }
+
+        @Override
+        protected long getCapacity(FluidVariant variant) {
             return RangedPumps.SERVER_CONFIG.getTankCapacity();
         }
+
+        @Override
+        protected void onFinalCommit() {
+            // Called after a successful insertion or extraction, markDirty to ensure the new amount and variant will be saved properly.
+        }
     };
+
+
     public final SimpleEnergyStorage energy = new SimpleEnergyStorage(RangedPumps.SERVER_CONFIG.getEnergyCapacity(), 512,512){
         @Override
         protected void onFinalCommit() {
@@ -182,9 +185,9 @@ public class PumpBlockEntity extends BlockEntity {
 //
 //        ticks++;
 //    }
-//
+
 //    @NotNull
-//    private FluidVariant drainAt(Level level, BlockPos pos, TransactionContext.Result action) {
+//    private FluidVariant drainAt(Level level, BlockPos pos, Direction dir) {
 //        BlockState frontBlockState = level.getBlockState(pos);
 //        Block frontBlock = frontBlockState.getBlock();
 //
@@ -205,41 +208,31 @@ public class PumpBlockEntity extends BlockEntity {
 //
 //        return FluidVariant.blank();
 //    }
-//
-//    BlockPos getCurrentPosition() {
-//        return currentPos == null ? getBlockPos().below() : currentPos;
-//    }
-//
-//    int getRange() {
-//        return range;
-//    }
-//
-//    PumpState getState() {
-//        if (range > RangedPumps.SERVER_CONFIG.getRange()) {
-//            return PumpState.DONE;
-//        } else if (level.hasNeighborSignal(getCurrentPosition())) {
-//            return PumpState.REDSTONE;
-//        } else if (energy.getAmount() == 0) {
-//            return PumpState.ENERGY;
-//        } else if (tank.getAmount() > tank.getCapacity() - FluidConstants.BUCKET) {
-//            return PumpState.FULL;
-//        } else {
-//            return PumpState.WORKING;
-//        }
-//    }
-//
-//    public SingleFluidStorage getTank() {
-//        return tank;
-//    }
-//
-//    public SimpleEnergyStorage getEnergy() {
-//        return energy;
-//    }
-//
-    @Override
-    public CompoundTag serializeNBT() {
-        CompoundTag tag = new CompoundTag();
 
+    BlockPos getCurrentPosition() {
+        return currentPos == null ? getBlockPos().below() : currentPos;
+    }
+
+    int getRange() {
+        return range;
+    }
+
+    PumpState getState() {
+        if (range > RangedPumps.SERVER_CONFIG.getRange()) {
+            return PumpState.DONE;
+        } else if (level.hasNeighborSignal(getCurrentPosition())) {
+            return PumpState.REDSTONE;
+        } else if (energy.getAmount() == 0) {
+            return PumpState.ENERGY;
+        } else if (tank.getAmount() > tank.getCapacity() - FluidConstants.BUCKET) {
+            return PumpState.FULL;
+        } else {
+            return PumpState.WORKING;
+        }
+    }
+
+    @Override
+    public CompoundTag save(CompoundTag tag) {
         tag.putLong("Energy", energy.getAmount());
 
         if (currentPos != null) {
@@ -254,14 +247,16 @@ public class PumpBlockEntity extends BlockEntity {
 
         tag.put("Surfaces", surfaces);
 
-        tank.writeToNBT(tag);
-
-        return tag;
+        tag.put("fluidVariant", tank.variant.toNbt());
+        tag.putLong("amount", tank.amount);
+        return super.save(tag);
     }
 
     @Override
-    public void deserializeNBT(CompoundTag tag) {
-        super.deserializeNBT(tag);
+    public void load(CompoundTag tag) {
+        super.load(tag);
+        tank.variant = FluidVariant.fromNbt(tag.getCompound("fluidVariant"));
+        tank.amount = tag.getLong("amount");
 
         if (tag.contains("Energy")) {
             energy.insert(tag.getInt("Energy"), Transaction.openOuter());
@@ -282,28 +277,5 @@ public class PumpBlockEntity extends BlockEntity {
                 this.surfaces.add(BlockPos.of(((LongTag) surface).getAsLong()));
             }
         }
-
-        tank.readFromNBT(tag);
     }
-
-
-//    private static class PumpTank extends SingleVariantStorage<FluidVariant> implements ExtractionOnlyStorage<FluidVariant> {
-//        @Override
-//        protected FluidVariant getBlankVariant() {
-//            return FluidVariant.of(Fluids.LAVA);
-//        }
-//
-//        @Override
-//        protected long getCapacity(FluidVariant variant) {
-//            return RangedPumps.SERVER_CONFIG.getTankCapacity();
-//        }
-//
-//        public long getCap(FluidVariant variant) {
-//            return getCapacity();
-//        }
-//
-//        public String getFluidName() {
-//            return this.getAmount()
-//        }
-//    }
 }

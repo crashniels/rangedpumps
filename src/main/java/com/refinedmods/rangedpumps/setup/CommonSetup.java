@@ -5,6 +5,7 @@ import com.refinedmods.rangedpumps.block.PumpBlock;
 import com.refinedmods.rangedpumps.blockentity.PumpBlockEntity;
 import com.refinedmods.rangedpumps.item.tab.MainCreativeModeTab;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
+import net.fabricmc.fabric.api.transfer.v1.fluid.FluidStorage;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.BlockItem;
@@ -33,5 +34,9 @@ public class CommonSetup {
 
     public static void RegiserEnergy() {
         EnergyStorage.SIDED.registerForBlockEntity((myBlockEntity, direction) -> myBlockEntity.energy, PumpBlockTE);
+    }
+
+    public static void RegiserFluids() {
+        FluidStorage.SIDED.registerForBlockEntity((myBlockEntity, direction) -> myBlockEntity.tank , PumpBlockTE);
     }
 }
