@@ -22,6 +22,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Material;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+import team.reborn.energy.api.EnergyStorage;
 
 public class PumpBlock extends BaseEntityBlock {
     public static final PumpBlock BLOCK = null;
@@ -38,6 +39,11 @@ public class PumpBlock extends BaseEntityBlock {
             if (blockEntity instanceof PumpBlockEntity) {
                 PumpBlockEntity pump = (PumpBlockEntity) blockEntity;
 
+               EnergyStorage energy = EnergyStorage.SIDED.find(level, pos, player.getDirection());
+               if (energy == null) {
+                   return InteractionResult.SUCCESS;
+               }
+
                 Component message = PumpState.getMessage(pump);
 
                 if (message != null) {
@@ -46,7 +52,7 @@ public class PumpBlock extends BaseEntityBlock {
 
                 if (pump.tank.getAmount() == 0) {
                     player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state_empty", pump.energy.getAmount(), pump.energy.getCapacity()), player.getUUID());
-                //} else {
+                } else {
                     player.sendMessage(new TranslatableComponent("block." + RangedPumps.ID + ".pump.state", pump.tank.getAmount(), pump.tank.getResource().getFluid().getBucket().getDescription().getString(), pump.energy.getAmount(), pump.energy.getCapacity()), player.getUUID());
                 }
             }

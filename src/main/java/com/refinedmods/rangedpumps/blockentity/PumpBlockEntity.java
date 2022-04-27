@@ -3,17 +3,22 @@ package com.refinedmods.rangedpumps.blockentity;
 import com.refinedmods.rangedpumps.RangedPumps;
 import com.refinedmods.rangedpumps.setup.CommonSetup;
 import net.fabricmc.fabric.api.transfer.v1.fluid.FluidConstants;
+import net.fabricmc.fabric.api.transfer.v1.fluid.FluidStorage;
 import net.fabricmc.fabric.api.transfer.v1.fluid.FluidVariant;
+import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
 import net.fabricmc.fabric.api.transfer.v1.storage.base.SingleVariantStorage;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.LongTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -24,6 +29,7 @@ import org.jetbrains.annotations.Nullable;
 import team.reborn.energy.api.base.SimpleEnergyStorage;
 
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
 
 @SuppressWarnings("ALL")
@@ -41,17 +47,21 @@ public class PumpBlockEntity extends BlockEntity {
 
         @Override
         protected void onFinalCommit() {
-            // Called after a successful insertion or extraction, markDirty to ensure the new amount and variant will be saved properly.
+            setChanged();
         }
     };
 
-
-    public final SimpleEnergyStorage energy = new SimpleEnergyStorage(RangedPumps.SERVER_CONFIG.getEnergyCapacity(), 512,512){
+    public final SimpleEnergyStorage energy = new SimpleEnergyStorage(RangedPumps.SERVER_CONFIG.getEnergyCapacity(), 512, 512) {
         @Override
         protected void onFinalCommit() {
-            //idk
+            setChanged();
         }
     };
+
+    public enum FluidAction {
+        EXECUTE,
+        SIMULATE
+    }
 
     private int ticks;
 
@@ -103,111 +113,119 @@ public class PumpBlockEntity extends BlockEntity {
     }
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, PumpBlockEntity tile) {
-        //tile.update(level, pos);
+        tile.update(level, pos, state, tile);
     }
 
-//    private void update(Level level, BlockPos pos) {
-//        if (!RangedPumps.SERVER_CONFIG.getUwseEnergy()) {
-//            energy.insert(energy.capacity, Transaction.openOuter());
-//        }
-//
-//        // Fill neighbors
-//        if (!tank.getResource().isBlank()) {
-//            List<FluidVariant> fluidHandlers = new LinkedList<>();
-//
-//            for (Direction facing : Direction.values()) {
-//                BlockEntity fluidTile = level.getBlockEntity(pos.relative(facing));
-//
-//                if (fluidTile != null) {
-//                    FluidStorage handler = fluidTile.getCapability(CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY, facing.getOpposite()).orElse(null);
-//
-//                    if (handler != null) {
-//                        fluidHandlers.add(handler);
-//                    }
-//                }
-//            }
-//
-//            if (!fluidHandlers.isEmpty()) {
-//                int transfer = (int) Math.floor((float) tank.getAmount() / (float) fluidHandlers.size());
-//
-//                for (IFluidHandler fluidHandler : fluidHandlers) {
-//                    FluidVariant toFill = tank.getResource();
-//                    toFill.setAmount(transfer);
-//
-//                    tank.drain(fluidHandler.fill(toFill, IFluidHandler.FluidAction.EXECUTE), IFluidHandler.FluidAction.EXECUTE);
-//                }
-//            }
-//        }
-//
-//        if ((RangedPumps.SERVER_CONFIG.getSpeed() == 0 || (ticks % RangedPumps.SERVER_CONFIG.getSpeed() == 0)) && getState() == PumpState.WORKING) {
-//            if (currentPos == null || currentPos.getY() == 0) {
-//                if (surfaces.isEmpty()) {
-//                    range++;
-//
-//                    if (range > RangedPumps.SERVER_CONFIG.getRange()) {
-//                        return;
-//                    }
-//
-//                    rebuildSurfaces();
-//                }
-//
-//                currentPos = surfaces.poll();
-//            } else {
-//                currentPos = currentPos.below();
-//            }
-//
-//            energy.extract(RangedPumps.SERVER_CONFIG.getEnergyUsagePerMove(), Transaction.openOuter());
-//
-//            FluidVariant drained = drainAt(level, currentPos, IFluidHandler.FluidAction.SIMULATE);
-//
-//            if (!drained.isBlank() && tank.fillInternal(drained, IFluidHandler.FluidAction.SIMULATE) == drained.getAmount()) {
-//                drained = drainAt(level, currentPos, IFluidHandler.FluidAction.EXECUTE);
-//
-//                if (!drained.isBlank()) {
-//                    tank.fillInternal(drained, IFluidHandler.FluidAction.EXECUTE);
-//
-//                    if (RangedPumps.SERVER_CONFIG.getReplaceLiquidWithBlock()) {
-//                        if (blockToReplaceLiquidsWith == null) {
-//                            blockToReplaceLiquidsWith = Registry.BLOCK.get(new ResourceLocation(RangedPumps.SERVER_CONFIG.getBlockIdToReplaceLiquidsWith()));
-//                        }
-//
-//                        if (blockToReplaceLiquidsWith != null) {
-//                            level.setBlockAndUpdate(currentPos, blockToReplaceLiquidsWith.defaultBlockState());
-//                        }
-//                    }
-//
-//                    energy.extract(RangedPumps.SERVER_CONFIG.getEnergyUsagePerDrain(), Transaction.openOuter());
-//                }
-//            }
-//
-//            setChanged();
-//        }
-//
-//        ticks++;
-//    }
+    private void update(Level level, BlockPos pos, BlockState state, PumpBlockEntity tile) {
+        if (!RangedPumps.SERVER_CONFIG.getUseEnergy()) {
+            try (Transaction transaction = Transaction.openOuter()) {
+                energy.insert(energy.capacity, transaction);
+            }
 
-//    @NotNull
-//    private FluidVariant drainAt(Level level, BlockPos pos, Direction dir) {
-//        BlockState frontBlockState = level.getBlockState(pos);
-//        Block frontBlock = frontBlockState.getBlock();
-//
-//        if (frontBlock instanceof LiquidBlock liquidBlock) {
-//            // @Volatile: Logic from FlowingFluidBlock#pickupFluid
-//            if (frontBlockState.getValue(LiquidBlock.LEVEL) == 0) {
-//                Fluid fluid = liquidBlock.getFluid().getFlowing();
-//
-//                if (action == TransactionContext.Result.COMMITTED) {
-//                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 11);
-//                }
-//
-//                return new Fluid(fluid, FluidAttributes.BUCKET_VOLUME);
-//            }
-//        } else if (frontBlock instanceof IFluidBlock fluidBlock && fluidBlock.canDrain(level, pos)) {
-//            return fluidBlock.drain(level, pos, action);
-//        }
-//
-//        return FluidVariant.blank();
-//    }
+        }
+
+        // Fill neighbors
+        if (!tank.getResource().isBlank()) {
+            List<Storage<FluidVariant>> fluidHandlers = new LinkedList<>();
+
+            for (Direction facing : Direction.values()) {
+                BlockEntity fluidTile = level.getBlockEntity(pos.relative(facing));
+
+                if (fluidTile != null) {
+                    Storage<FluidVariant> handler = FluidStorage.SIDED.find(level, pos, null);
+
+                    if (handler != null) {
+                        fluidHandlers.add(handler);
+                    }
+                }
+            }
+
+            if (!fluidHandlers.isEmpty()) {
+                int transfer = (int) Math.floor((float) tank.getAmount() / (float) fluidHandlers.size());
+
+                for (Storage<FluidVariant> fluidHandler : fluidHandlers) {
+                    FluidVariant toFill = tank.getResource();
+                    toFill. (transfer);
+
+                    tank.drain(fluidHandler.fill(toFill, IFluidHandler.FluidAction.EXECUTE), IFluidHandler.FluidAction.EXECUTE);
+                }
+            }
+        }
+
+        if ((RangedPumps.SERVER_CONFIG.getSpeed() == 0 || (ticks % RangedPumps.SERVER_CONFIG.getSpeed() == 0)) && getState() == PumpState.WORKING) {
+            if (currentPos == null || currentPos.getY() == 0) {
+                if (surfaces.isEmpty()) {
+                    range++;
+
+                    if (range > RangedPumps.SERVER_CONFIG.getRange()) {
+                        return;
+                    }
+
+                    rebuildSurfaces();
+                }
+
+                currentPos = surfaces.poll();
+            } else {
+                currentPos = currentPos.below();
+            }
+            try (Transaction transaction = Transaction.openOuter()) {
+                energy.extract(RangedPumps.SERVER_CONFIG.getEnergyUsagePerMove(), transaction);
+            }
+
+
+            FluidVariant drained = drainAt(level, currentPos, IFluidHandler.FluidAction.SIMULATE);
+
+            if (!drained.isBlank() && tank.fillInternal(drained, IFluidHandler.FluidAction.SIMULATE) == drained.getAmount()) {
+                drained = drainAt(level, currentPos, IFluidHandler.FluidAction.EXECUTE);
+
+                if (!drained.isBlank()) {
+                    tank.fillInternal(drained, IFluidHandler.FluidAction.EXECUTE);
+
+                    if (RangedPumps.SERVER_CONFIG.getReplaceLiquidWithBlock()) {
+                        if (blockToReplaceLiquidsWith == null) {
+                            blockToReplaceLiquidsWith = Registry.BLOCK.get(new ResourceLocation(RangedPumps.SERVER_CONFIG.getBlockIdToReplaceLiquidsWith()));
+                        }
+
+                        if (blockToReplaceLiquidsWith != null) {
+                            level.setBlockAndUpdate(currentPos, blockToReplaceLiquidsWith.defaultBlockState());
+                        }
+                    }
+                    try (Transaction transaction = Transaction.openOuter()) {
+                        energy.extract(RangedPumps.SERVER_CONFIG.getEnergyUsagePerDrain(), transaction);
+                    }
+
+                }
+            }
+
+            setChanged();
+        }
+
+        ticks++;
+    }
+
+    @NotNull
+    private FluidVariant drainAt(Level level, BlockPos pos, Direction dir, FluidAction action) {
+        BlockState frontBlockState = level.getBlockState(pos);
+        Block frontBlock = frontBlockState.getBlock();
+
+        if (frontBlock instanceof LiquidBlock liquidBlock) {
+            // @Volatile: Logic from FlowingFluidBlock#pickupFluid
+            if (frontBlockState.getValue(LiquidBlock.LEVEL) == 0) {
+                Fluid fluid = liquidBlock.getFluidState(frontBlockState).getType();
+
+                if (action == FluidAction.EXECUTE) {
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 11);
+                }
+
+                return new FluidVariant(fluid, FluidConstants.BUCKET) {
+                };
+            }
+        } else if (frontBlock instanceof LiquidBlock fluidBlock && fluidBlock.canDrain(level, pos)) {
+            return fluidBlock.drain(level, pos, action);
+        }
+
+        return FluidVariant.blank();
+    }
 
     BlockPos getCurrentPosition() {
         return currentPos == null ? getBlockPos().below() : currentPos;
@@ -259,7 +277,10 @@ public class PumpBlockEntity extends BlockEntity {
         tank.amount = tag.getLong("amount");
 
         if (tag.contains("Energy")) {
-            energy.insert(tag.getInt("Energy"), Transaction.openOuter());
+            try (Transaction tx = Transaction.openOuter()) {
+                energy.insert(tag.getInt("Energy"), tx);
+            }
+
         }
 
         if (tag.contains("CurrentPos")) {
