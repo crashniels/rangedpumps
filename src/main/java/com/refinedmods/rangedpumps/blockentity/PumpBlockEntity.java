@@ -23,7 +23,6 @@ import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluid;
-import net.minecraft.world.level.material.Fluids;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import team.reborn.energy.api.base.SimpleEnergyStorage;
@@ -179,16 +178,16 @@ public class PumpBlockEntity extends BlockEntity {
             long inserted = 0;
             if (!drained.isBlank()) {
                 try (Transaction transaction = Transaction.openOuter()) {
-                    inserted = tank.insert(drained, drained.getFluid().getAmount(drained.getFluid().defaultFluidState()),transaction);
+                    inserted = tank.insert(drained, FluidConstants.BUCKET ,transaction);
                 }
             }
 
-            if (!drained.isBlank() && inserted == drained.getFluid().getAmount(drained.getFluid().defaultFluidState())) {
+            if (!drained.isBlank() && inserted == FluidConstants.BUCKET) {
                 drained = drainAt(level, currentPos, FluidAction.EXECUTE);
 
                 if (!drained.isBlank()) {
                     try (Transaction transaction = Transaction.openOuter()) {
-                        tank.insert(drained, drained.getFluid().getAmount(drained.getFluid().defaultFluidState()),transaction);
+                        tank.insert(drained, FluidConstants.BUCKET, transaction);
                         transaction.commit();
                     }
 
@@ -285,15 +284,10 @@ public class PumpBlockEntity extends BlockEntity {
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
+
         tank.variant = FluidVariant.fromNbt(tag.getCompound("fluidVariant"));
         tank.amount = tag.getLong("amount");
-
-        if (tag.contains("Energy")) {
-            try (Transaction tx = Transaction.openOuter()) {
-                energy.insert(tag.getInt("Energy"), tx);
-            }
-
-        }
+        energy.amount = tag.getLong("Energy");
 
         if (tag.contains("CurrentPos")) {
             currentPos = BlockPos.of(tag.getLong("CurrentPos"));
