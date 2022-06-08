@@ -145,9 +145,10 @@ public class PumpBlockEntity extends BlockEntity {
 
                 for (Storage<FluidVariant> fluidHandler : fluidHandlers) {
                     FluidVariant toFill = tank.getResource();
-                    toFill. (transfer);
+                    try (Transaction transaction = Transaction.openOuter()) {
+                        tank.extract(toFill, transfer, transaction);
+                    }
 
-                    tank.drain(fluidHandler.fill(toFill, IFluidHandler.FluidAction.EXECUTE), IFluidHandler.FluidAction.EXECUTE);
                 }
             }
         }
@@ -173,13 +174,24 @@ public class PumpBlockEntity extends BlockEntity {
             }
 
 
-            FluidVariant drained = drainAt(level, currentPos, IFluidHandler.FluidAction.SIMULATE);
+            FluidVariant drained = drainAt(level, currentPos, FluidAction.SIMULATE);
 
-            if (!drained.isBlank() && tank.fillInternal(drained, IFluidHandler.FluidAction.SIMULATE) == drained.getAmount()) {
-                drained = drainAt(level, currentPos, IFluidHandler.FluidAction.EXECUTE);
+            long inserted = 0;
+            if (!drained.isBlank()) {
+                try (Transaction transaction = Transaction.openOuter()) {
+                    inserted = tank.insert(drained, drained.getFluid().getAmount(drained.getFluid().defaultFluidState()),transaction);
+                }
+            }
+
+            if (!drained.isBlank() && inserted == drained.getFluid().getAmount(drained.getFluid().defaultFluidState())) {
+                drained = drainAt(level, currentPos, FluidAction.EXECUTE);
 
                 if (!drained.isBlank()) {
-                    tank.fillInternal(drained, IFluidHandler.FluidAction.EXECUTE);
+                    try (Transaction transaction = Transaction.openOuter()) {
+                        tank.insert(drained, drained.getFluid().getAmount(drained.getFluid().defaultFluidState()),transaction);
+                        transaction.commit();
+                    }
+
 
                     if (RangedPumps.SERVER_CONFIG.getReplaceLiquidWithBlock()) {
                         if (blockToReplaceLiquidsWith == null) {
@@ -192,6 +204,7 @@ public class PumpBlockEntity extends BlockEntity {
                     }
                     try (Transaction transaction = Transaction.openOuter()) {
                         energy.extract(RangedPumps.SERVER_CONFIG.getEnergyUsagePerDrain(), transaction);
+                        transaction.commit();
                     }
 
                 }
@@ -204,24 +217,23 @@ public class PumpBlockEntity extends BlockEntity {
     }
 
     @NotNull
-    private FluidVariant drainAt(Level level, BlockPos pos, Direction dir, FluidAction action) {
+    private FluidVariant drainAt(Level level, BlockPos pos, FluidAction action) {
         BlockState frontBlockState = level.getBlockState(pos);
         Block frontBlock = frontBlockState.getBlock();
 
         if (frontBlock instanceof LiquidBlock liquidBlock) {
             // @Volatile: Logic from FlowingFluidBlock#pickupFluid
             if (frontBlockState.getValue(LiquidBlock.LEVEL) == 0) {
-                Fluid fluid = liquidBlock.getFluidState(frontBlockState).getType();
+                Fluid fluid = liquidBlock.fluid;
 
                 if (action == FluidAction.EXECUTE) {
                     level.setBlock(pos, Blocks.AIR.defaultBlockState(), 11);
                 }
 
-                return new FluidVariant(fluid, FluidConstants.BUCKET) {
-                };
+                return FluidVariant.of(fluid, null);
             }
-        } else if (frontBlock instanceof LiquidBlock fluidBlock && fluidBlock.canDrain(level, pos)) {
-            return fluidBlock.drain(level, pos, action);
+//        } else if (frontBlock instanceof LiquidBlock fluidBlock && fluidBlock.canDrain(level, pos)) {
+//            return fluidBlock.drain(level, pos, action);
         }
 
         return FluidVariant.blank();
@@ -250,7 +262,7 @@ public class PumpBlockEntity extends BlockEntity {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag) {
+    public void saveAdditional(CompoundTag tag) {
         tag.putLong("Energy", energy.getAmount());
 
         if (currentPos != null) {
@@ -267,7 +279,7 @@ public class PumpBlockEntity extends BlockEntity {
 
         tag.put("fluidVariant", tank.variant.toNbt());
         tag.putLong("amount", tank.amount);
-        return super.save(tag);
+        super.saveAdditional(tag);
     }
 
     @Override
