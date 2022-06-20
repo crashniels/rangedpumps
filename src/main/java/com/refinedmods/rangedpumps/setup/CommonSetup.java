@@ -37,6 +37,6 @@ public class CommonSetup {
     }
 
     public static void RegiserFluids() {
-        FluidStorage.SIDED.registerForBlockEntity((myBlockEntity, direction) -> myBlockEntity.tank , PumpBlockTE);
+        FluidStorage.SIDED.registerForBlockEntity((myBlockEntity, direction) -> myBlockEntity.tank, PumpBlockTE);
     }
 }

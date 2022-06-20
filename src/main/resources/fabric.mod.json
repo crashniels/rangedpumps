@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "rangedpumps",
-  "version": "${version}",
+  "version": "0.9",
 
   "name": "Ranged Pumps",
   "description": "Ranged Pumps is a simple mod that adds a pump that pumps liquids in a range",
@@ -30,9 +30,7 @@
     "fabricloader": ">=0.14.6",
     "fabric": "*",
     "minecraft": "1.18.2",
-    "java": ">=17"
-  },
-  "suggests": {
-    "another-mod": "*"
+    "java": ">=17",
+    "forgeconfigapiport": "*"
   }
 }

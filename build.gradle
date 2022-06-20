@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    // To change the versions see the gradle.properties.old file
+    // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
@@ -30,7 +30,7 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     //Forge Config API
-    modImplementation "curse.maven:ForgeConfigAPIPort-547434:3600918"
+    modImplementation "curse.maven:ForgeConfigAPIPort-547434:3671141"
 
     //Energy API
     include modApi('teamreborn:energy:2.2.0') {
