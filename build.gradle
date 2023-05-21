@@ -33,7 +33,7 @@ dependencies {
     modImplementation "curse.maven:ForgeConfigAPIPort-547434:3671141"
 
     //Energy API
-    include modApi('teamreborn:energy:2.2.0') {
+    include modApi('teamreborn:energy:2.3.0') {
         exclude(group: "net.fabricmc.fabric-api")
     }
 
