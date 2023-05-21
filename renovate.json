@@ -8,7 +8,8 @@
       "matchDatasources": ["maven"],
       "registryUrls": [
         "https://maven.fabricmc.net",
-        "https://cursemaven.com"
+        "https://cursemaven.com",
+        "https://repo.maven.apache.org/maven2"
       ]
     }
   ]
