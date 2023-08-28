@@ -37,7 +37,7 @@ dependencies {
         exclude(group: "net.fabricmc.fabric-api")
     }
 
-    implementation 'com.electronwill.night-config:toml:3.6.6'
+    implementation 'com.electronwill.night-config:toml:3.6.7'
     implementation 'com.electronwill.night-config:core:3.6.6'
 }
 
